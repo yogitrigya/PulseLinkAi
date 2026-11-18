@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulseLink AI — Shortage Insights & Compatibility</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="ai-engine.js"></script>
+</head>
+<body>
+  <div class="main_container">
+    
+    <!-- Shared Header -->
+    <div class="header_box">
+      <div>
+        <h1 class="brand_title">PulseLink <span>AI</span></h1>
+        <p class="brand_sub">AI Supply-Demand Gap Predictor & Medical Compatibility Reference</p>
+      </div>
+      <nav class="nav_links">
+        <a href="index.html">1. AI Message Parser</a>
+        <a href="feed.html">2. Live Emergency Feed</a>
+        <a href="donors.html">3. Donor Registry</a>
+        <a href="insights.html" class="active_page">4. AI Shortage Insights</a>
+      </nav>
+    </div>
+
+    <div class="grid_two">
+      
+      <!-- Left: AI Supply vs Demand Gap Report -->
+      <div class="panel_card">
+        <h3 class="section_title">AI Real-Time Blood Shortage Forecast</h3>
+        <p style="font-size:12px; color:#94a3b8; margin-bottom:10px;">
+          Compares active non-expired emergency units needed against medically compatible donors in the registry:
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Blood Group</th>
+              <th>Active Demand</th>
+              <th>Compatible Donors</th>
+              <th>AI Risk Status</th>
+            </tr>
+          </thead>
+          <tbody id="shortage_table_body"></tbody>
+        </table>
+      </div>
+
+      <!-- Right: Blood Compatibility Knowledge Base -->
+      <div class="panel_card">
+        <h3 class="section_title">AI Rule Engine: RBC Compatibility Matrix</h3>
+        <p style="font-size:12px; color:#94a3b8; margin-bottom:10px;">
+          Rules used by PulseLink AI when auto-matching emergency requests to registered donors:
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Donor Type</th>
+              <th>Can Safely Donate To</th>
+            </tr>
+          </thead>
+          <tbody id="matrix_table_body"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    $(document).ready(function() {
+      var shortageReport = PulseAI.analyzeShortages();
+      var tbody = $("#shortage_table_body");
+
+      for (var i = 0; i < shortageReport.length; i++) {
+        var row = shortageReport[i];
+        var badge = "badge_expired";
+        if (row.risk === "Critical Shortage") badge = "badge_critical";
+        else if (row.risk === "Low Reserve") badge = "badge_moderate";
+
+        tbody.append(
+          "<tr>" +
+            "<td><strong style='color:#fff;'>" + row.bloodGroup + "</strong></td>" +
+            "<td>" + row.demandUnits + " Unit(s)</td>" +
+            "<td>" + row.compatibleSupply + " Donor(s)</td>" +
+            "<td><span class='" + badge + "'>" + row.risk + "</span></td>" +
+          "</tr>"
+        );
+      }
+
+      var matrixBody = $("#matrix_table_body");
+      var rules = PulseAI.BLOOD_COMPATIBILITY;
+      Object.keys(rules).forEach(function(donorType) {
+        matrixBody.append(
+          "<tr>" +
+            "<td><strong style='color:#f43f5e;'>" + donorType + "</strong></td>" +
+            "<td style='color:#cbd5e1;'>" + rules[donorType].join(", ") + "</td>" +
+          "</tr>"
+        );
+      });
+    });
+  </script>
+</body>
+</html>
