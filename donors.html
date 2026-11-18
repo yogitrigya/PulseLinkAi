@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulseLink AI — Donor & Resource Registry</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="ai-engine.js"></script>
+</head>
+<body>
+  <div class="main_container">
+    
+    <!-- Shared Header -->
+    <div class="header_box">
+      <div>
+        <h1 class="brand_title">PulseLink <span>AI</span></h1>
+        <p class="brand_sub">Verified Community Blood Donors & Oxygen Banks</p>
+      </div>
+      <nav class="nav_links">
+        <a href="index.html">1. AI Message Parser</a>
+        <a href="feed.html">2. Live Emergency Feed</a>
+        <a href="donors.html" class="active_page">3. Donor Registry</a>
+        <a href="insights.html">4. AI Shortage Insights</a>
+      </nav>
+    </div>
+
+    <div class="grid_two">
+      
+      <!-- Left: Register New Donor / Oxygen Supplier -->
+      <div class="panel_card">
+        <h3 class="section_title">Register as a Community Donor</h3>
+
+        <label class="input_label">Full Name / Organization:</label>
+        <input type="text" id="donor_name" placeholder="e.g. Kabir Malhotra">
+
+        <label class="input_label">Resource Offered:</label>
+        <select id="donor_resource">
+          <option value="Blood">Blood Donation</option>
+          <option value="Oxygen Cylinder (10L)">Oxygen Cylinder (10L)</option>
+          <option value="Oxygen Concentrator">Oxygen Concentrator</option>
+        </select>
+
+        <label class="input_label">Blood Group (if Blood Donor):</label>
+        <select id="donor_blood">
+          <option value="O-">O- (Universal Donor)</option>
+          <option value="O+">O+</option>
+          <option value="A-">A-</option>
+          <option value="A+">A+</option>
+          <option value="B-">B-</option>
+          <option value="B+">B+</option>
+          <option value="AB-">AB-</option>
+          <option value="AB+">AB+</option>
+        </select>
+
+        <label class="input_label">Neighborhood / Sector:</label>
+        <input type="text" id="donor_area" placeholder="e.g. Sector 49, Gurgaon">
+
+        <label class="input_label">Emergency Contact Phone:</label>
+        <input type="text" id="donor_phone" placeholder="+91 98XXX-XXXXX">
+
+        <button id="btn_add_donor" class="btn_primary">Add to Verified Registry</button>
+      </div>
+
+      <!-- Right: AI Compatibility Filter & Directory -->
+      <div class="panel_card">
+        <h3 class="section_title">AI Compatibility Finder</h3>
+        <p style="font-size:12px; color:#94a3b8; margin-bottom:10px;">
+          Select a patient's blood group or oxygen need—AI automatically filters all medically compatible donors (including universal O- donors):
+        </p>
+
+        <select id="patient_need_filter" style="margin-bottom:14px;">
+          <option value="ALL">Show All Registered Donors & Oxygen Banks</option>
+          <option value="O-">Patient Needs: O- Blood</option>
+          <option value="O+">Patient Needs: O+ Blood</option>
+          <option value="A-">Patient Needs: A- Blood</option>
+          <option value="A+">Patient Needs: A+ Blood</option>
+          <option value="B-">Patient Needs: B- Blood</option>
+          <option value="B+">Patient Needs: B+ Blood</option>
+          <option value="AB-">Patient Needs: AB- Blood</option>
+          <option value="AB+">Patient Needs: AB+ Blood</option>
+          <option value="OXYGEN">Patient Needs: Oxygen Cylinder / Concentrator</option>
+        </select>
+
+        <div id="donors_list_container"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    $(document).ready(function() {
+
+      function renderDonors() {
+        var filterVal = $("#patient_need_filter").val();
+        var list = [];
+
+        if (filterVal === "ALL") {
+          list = PulseAI.getDonors();
+        } else if (filterVal === "OXYGEN") {
+          list = PulseAI.findCompatibleDonors("Oxygen Cylinder", "N/A");
+        } else {
+          list = PulseAI.findCompatibleDonors("Blood", filterVal);
+        }
+
+        var container = $("#donors_list_container");
+        container.empty();
+
+        for (var i = 0; i < list.length; i++) {
+          var d = list[i];
+          var tag = (d.resource === "Blood")
+            ? "<span class='badge_critical'>" + d.blood + " Blood</span>"
+            : "<span class='info_chip'>" + d.resource + "</span>";
+
+          container.append(
+            "<div class='req_card' style='padding:12px 14px; margin-bottom:10px;'>" +
+              "<div style='display:flex; justify-content:space-between; align-items:center;'>" +
+                "<strong style='color:#fff;'>" + d.name + "</strong>" +
+                tag +
+              "</div>" +
+              "<p style='font-size:12px; color:#94a3b8; margin-top:5px;'>" + d.area + " • <span style='color:#4ade80;'>" + d.phone + "</span></p>" +
+            "</div>"
+          );
+        }
+      }
+
+      $("#btn_add_donor").click(function() {
+        var name = $("#donor_name").val().trim();
+        var resource = $("#donor_resource").val();
+        var blood = (resource === "Blood") ? $("#donor_blood").val() : "N/A";
+        var area = $("#donor_area").val().trim();
+        var phone = $("#donor_phone").val().trim();
+
+        if (!name || !area || !phone) {
+          alert("Please fill in name, area, and phone number.");
+          return;
+        }
+
+        var donors = PulseAI.getDonors();
+        donors.unshift({
+          id: Date.now(),
+          name: name,
+          blood: blood,
+          resource: resource,
+          area: area,
+          phone: phone,
+          available: true
+        });
+        PulseAI.saveDonors(donors);
+
+        $("#donor_name, #donor_area, #donor_phone").val("");
+        renderDonors();
+      });
+
+      $("#patient_need_filter").change(renderDonors);
+      renderDonors();
+    });
+  </script>
+</body>
+</html>
