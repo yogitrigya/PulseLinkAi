@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulseLink AI — Live Emergency Feed</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="ai-engine.js"></script>
+</head>
+<body>
+  <div class="main_container">
+    
+    <!-- Shared Header -->
+    <div class="header_box">
+      <div>
+        <h1 class="brand_title">PulseLink <span>AI</span></h1>
+        <p class="brand_sub">Structured Emergency Feed • Auto-Filtered for Expiration & Medical Compatibility</p>
+      </div>
+      <nav class="nav_links">
+        <a href="index.html">1. AI Message Parser</a>
+        <a href="feed.html" class="active_page">2. Live Emergency Feed</a>
+        <a href="donors.html">3. Donor Registry</a>
+        <a href="insights.html">4. AI Shortage Insights</a>
+      </nav>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="panel_card" style="padding:16px 20px;">
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+        <input type="text" id="feed_search" placeholder="Search hospital, blood group (e.g. A+), or keyword..." style="flex:2; min-width:200px;">
+        <select id="feed_resource_filter" style="flex:1; min-width:150px;">
+          <option value="All">All Resource Types</option>
+          <option value="Blood">Blood Requests</option>
+          <option value="Oxygen Cylinder">Oxygen Cylinders</option>
+        </select>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#cbd5e1; cursor:pointer;">
+          <input type="checkbox" id="toggle_expired" style="width:auto;"> Show Expired Forwards
+        </label>
+        <button id="btn_purge_expired" class="btn_secondary">Purge Expired</button>
+      </div>
+    </div>
+
+    <!-- Feed List -->
+    <div id="emergency_cards_container"></div>
+
+  </div>
+
+  <script>
+    $(document).ready(function() {
+
+      function renderFeed() {
+        var includeExpired = $("#toggle_expired").is(":checked");
+        var searchQuery = $("#feed_search").val().toLowerCase().trim();
+        var resourceFilter = $("#feed_resource_filter").val();
+
+        var allReqs = PulseAI.getRequests();
+        var filtered = PulseAI.filterValidRequests(allReqs, includeExpired);
+
+        // Sort highest urgency score first
+        filtered.sort(function(a, b) { return b.urgencyScore - a.urgencyScore; });
+
+        var container = $("#emergency_cards_container");
+        container.empty();
+
+        var renderedCount = 0;
+
+        for (var i = 0; i < filtered.length; i++) {
+          var req = filtered[i];
+
+          if (resourceFilter !== "All" && req.resourceType !== resourceFilter) continue;
+          if (searchQuery !== "" &&
+              !req.hospital.toLowerCase().includes(searchQuery) &&
+              !req.bloodGroup.toLowerCase().includes(searchQuery) &&
+              !req.rawMessage.toLowerCase().includes(searchQuery)) {
+            continue;
+          }
+
+          renderedCount++;
+          var compatibleDonors = PulseAI.findCompatibleDonors(req.resourceType, req.bloodGroup);
+          var donorNames = compatibleDonors.length > 0
+            ? compatibleDonors.map(function(d) { return d.name + " (" + (d.resource === "Blood" ? d.blood : "O2") + ")"; }).join(", ")
+            : "None currently available";
+
+          var badgeClass = req.isExpired ? "badge_expired" : (req.priority === "Critical" ? "badge_critical" : "badge_moderate");
+          var badgeText = req.isExpired ? "EXPIRED" : (req.priority + " • " + req.urgencyScore + "% Risk");
+
+          var actionHtml = (req.status === "Fulfilled")
+            ? "<span style='color:#4ade80; font-weight:700;'>✓ Fulfilled</span>"
+            : "<button class='btn_fulfill' data-id='" + req.id + "'>Mark Fulfilled</button>";
+
+          container.append(
+            "<div class='req_card' style='" + (req.isExpired ? "opacity:0.6;" : "") + "'>" +
+              "<div class='card_top'>" +
+                "<span style='font-size:16px; font-weight:700; color:#fff;'>" +
+                  req.resourceType + (req.bloodGroup !== "N/A" ? " • <span style='color:#f43f5e;'>" + req.bloodGroup + "</span>" : "") +
+                  " <span style='color:#94a3b8; font-weight:400; font-size:13px;'>(" + req.units + " Unit)</span>" +
+                "</span>" +
+                "<span class='" + badgeClass + "'>" + badgeText + "</span>" +
+              "</div>" +
+              "<p style='font-size:14px; color:#e2e8f0; margin-bottom:6px;'><b>Hospital:</b> " + req.hospital + " • <b>Contact:</b> " + req.phone + "</p>" +
+              "<div class='chip_row'>" +
+                "<span class='info_chip'>⏱️ " + req.timeLabel + "</span>" +
+                "<span class='info_chip' style='background:rgba(74,222,128,0.12); border-color:rgba(74,222,128,0.3); color:#86efac;'>" +
+                  "AI Compatible Matches (" + compatibleDonors.length + "): " + donorNames +
+                "</span>" +
+              "</div>" +
+              "<div class='raw_quote'><b>Original Forward:</b> \"" + req.rawMessage + "\"</div>" +
+              "<div class='card_footer'>" +
+                "<span>Status: <b>" + req.status + "</b></span>" +
+                actionHtml +
+              "</div>" +
+            "</div>"
+          );
+        }
+
+        if (renderedCount === 0) {
+          container.html("<div class='panel_card' style='text-align:center; color:#94a3b8;'>No matching active requests found. Expired forwards are automatically hidden by AI filtering.</div>");
+        }
+      }
+
+      $(document).on("click", ".btn_fulfill", function() {
+        var targetId = $(this).data("id");
+        var list = PulseAI.getRequests();
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].id === targetId) list[i].status = "Fulfilled";
+        }
+        PulseAI.saveRequests(list);
+        renderFeed();
+      });
+
+      $("#btn_purge_expired").click(function() {
+        var validOnly = PulseAI.filterValidRequests(PulseAI.getRequests(), false);
+        PulseAI.saveRequests(validOnly);
+        renderFeed();
+      });
+
+      $("#feed_search").on("keyup", renderFeed);
+      $("#feed_resource_filter, #toggle_expired").change(renderFeed);
+
+      renderFeed();
+    });
+  </script>
+</body>
+</html>
