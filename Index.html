@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulseLink AI — Emergency Message Parser</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="ai-engine.js"></script>
+</head>
+<body>
+  <div class="main_container">
+    
+    <!-- Shared Header -->
+    <div class="header_box">
+      <div>
+        <h1 class="brand_title">PulseLink <span>AI</span></h1>
+        <p class="brand_sub">Emergency Blood & Oxygen NLP Triage • Compatibility Matching • Auto-Expiry Filter</p>
+      </div>
+      <nav class="nav_links">
+        <a href="index.html" class="active_page">1. AI Message Parser</a>
+        <a href="feed.html">2. Live Emergency Feed</a>
+        <a href="donors.html">3. Donor Registry</a>
+        <a href="insights.html">4. AI Shortage Insights</a>
+      </nav>
+    </div>
+
+    <!-- Top KPI Strip -->
+    <div class="stats_row">
+      <div class="stat_box">
+        <p class="stat_label">Active Valid Alerts</p>
+        <h2 id="kpi_active" style="color:#f43f5e;">0</h2>
+      </div>
+      <div class="stat_box">
+        <p class="stat_label">Expired Filtered Out</p>
+        <h2 id="kpi_expired" style="color:#94a3b8;">0</h2>
+      </div>
+      <div class="stat_box">
+        <p class="stat_label">Verified Donors</p>
+        <h2 id="kpi_donors" style="color:#38bdf8;">0</h2>
+      </div>
+      <div class="stat_box">
+        <p class="stat_label">Fulfilled Cases</p>
+        <h2 id="kpi_solved" style="color:#4ade80;">0</h2>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="grid_two">
+      
+      <!-- Left: Messy WhatsApp Input -->
+      <div class="panel_card">
+        <h3 class="section_title">Paste Messy WhatsApp Forward</h3>
+        <p style="font-size:12px; color:#94a3b8; margin-bottom:10px;">Try sample unverified emergency forwards:</p>
+        
+        <div class="preset_row">
+          <button type="button" class="preset_btn" data-sample="rare">🩸 Rare AB- Surgery</button>
+          <button type="button" class="preset_btn" data-sample="oxygen">🫁 Urgent Oxygen</button>
+          <button type="button" class="preset_btn" data-sample="expired">⏳ Stale/Expired Forward</button>
+        </div>
+
+        <label class="input_label">Raw Emergency Message:</label>
+        <textarea id="raw_whatsapp_input" rows="5" placeholder="Paste any chaotic WhatsApp message here (e.g., 'URGENT need 2 units O- blood at Fortis Hospital Gurgaon ASAP call 98XXXXXXXX')..."></textarea>
+
+        <button id="btn_parse_ai" class="btn_primary">Extract Entities & Match Compatible Donors</button>
+      </div>
+
+      <!-- Right: Structured AI Output + Matched Donors -->
+      <div class="panel_card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 class="section_title">AI Structured Extraction</h3>
+          <button id="btn_reset_all" class="btn_secondary">Reset Demo Data</button>
+        </div>
+
+        <div id="parser_placeholder" style="color:#94a3b8; font-size:13px; padding:20px 0;">
+          Paste a message on the left and run the AI parser to extract blood group, hospital, units, urgency score, expiration validity, and medically compatible donors.
+        </div>
+
+        <div id="ai_parsed_output" style="display:none;">
+          <div class="ai_box">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="color:#fda4af; font-size:15px;" id="out_title"></strong>
+              <span id="out_badge" class="badge_critical"></span>
+            </div>
+            <p id="out_details"></p>
+            <div class="chip_row" id="out_chips"></div>
+          </div>
+
+          <h4 style="margin-top:16px; margin-bottom:8px; font-size:14px; color:#38bdf8;">
+            Auto-Matched Compatible Donors (<span id="match_count">0</span>):
+          </h4>
+          <div id="matched_donors_list"></div>
+
+          <button id="btn_publish_feed" class="btn_primary" style="background:#38bdf8; color:#0b0d12;">
+            Publish Verified Card to Live Emergency Feed →
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    $(document).ready(function() {
+      var latestParsed = null;
+      var latestRaw = "";
+
+      function updateStats() {
+        var allReqs = PulseAI.getRequests();
+        var validActive = PulseAI.filterValidRequests(allReqs, false).filter(function(r) { return r.status === "Active"; });
+        var expiredCount = allReqs.filter(function(r) { return r.expiresAt < Date.now(); }).length;
+        var solvedCount = allReqs.filter(function(r) { return r.status === "Fulfilled"; }).length;
+
+        $("#kpi_active").text(validActive.length);
+        $("#kpi_expired").text(expiredCount);
+        $("#kpi_donors").text(PulseAI.getDonors().length);
+        $("#kpi_solved").text(solvedCount);
+      }
+
+      // Sample WhatsApp Forwards (Anonymized with letters & 98XXXXXXXX)
+      $(".preset_btn").click(function() {
+        var type = $(this).data("sample");
+        if (type === "rare") {
+          $("#raw_whatsapp_input").val("URGENT!! Accident victim needs 3 units AB- blood immediately at Max Hospital Gurgaon. Family in panic please forward! Call K 98XXXXXXXX ASAP");
+        } else if (type === "oxygen") {
+          $("#raw_whatsapp_input").val("CRITICAL: Senior citizen SpO2 dropping fast at Sector 49 Gurgaon, need 1 oxygen cylinder immediately! Contact L 98XXXXXXXX");
+        } else if (type === "expired") {
+          $("#raw_whatsapp_input").val("Forwarded many times: Needed 2 units O+ blood at Civil Hospital yesterday morning, call M 98XXXXXXXX");
+        }
+      });
+
+      // Run AI NLP Parser
+      $("#btn_parse_ai").click(function() {
+        var raw = $("#raw_whatsapp_input").val().trim();
+        if (!raw) {
+          alert("Please paste an emergency message first.");
+          return;
+        }
+
+        latestRaw = raw;
+        latestParsed = PulseAI.parseEmergencyMessage(raw);
+        var matches = PulseAI.findCompatibleDonors(latestParsed.resourceType, latestParsed.bloodGroup);
+
+        $("#parser_placeholder").hide();
+        $("#ai_parsed_output").fadeIn();
+
+        $("#out_title").text(latestParsed.resourceType + (latestParsed.bloodGroup !== "N/A" ? " (" + latestParsed.bloodGroup + ")" : ""));
+        $("#out_badge")
+          .attr("class", latestParsed.isExpired ? "badge_expired" : (latestParsed.priority === "Critical" ? "badge_critical" : "badge_moderate"))
+          .text(latestParsed.isExpired ? "EXPIRED FORWARD" : latestParsed.priority + " • " + latestParsed.urgencyScore + "% Risk");
+
+        $("#out_details").html(
+          "<b>Hospital / Location:</b> " + latestParsed.hospital + "<br>" +
+          "<b>Contact:</b> " + latestParsed.phone + " • <b>AI Extraction Confidence:</b> " + latestParsed.confidence + "%"
+        );
+
+        $("#out_chips").html(
+          "<span class='info_chip'>Quantity: " + latestParsed.units + " Unit(s)</span>" +
+          "<span class='info_chip'>Validity: " + (latestParsed.isExpired ? "Stale / Expired" : "Active for " + latestParsed.validHours + " hrs") + "</span>"
+        );
+
+        $("#match_count").text(matches.length);
+        $("#matched_donors_list").empty();
+
+        if (matches.length === 0) {
+          $("#matched_donors_list").html("<p style='font-size:12px; color:#f87171;'>No direct donors in registry. Recommend broadcasting to partner blood banks.</p>");
+        } else {
+          for (var i = 0; i < matches.length; i++) {
+            var d = matches[i];
+            var compatNote = (d.resource === "Blood")
+              ? "Blood Type: <b>" + d.blood + "</b> (Medically Compatible)"
+              : "Resource: <b>" + d.resource + "</b>";
+
+            $("#matched_donors_list").append(
+              "<div class='req_card' style='padding:10px 12px; margin-bottom:8px;'>" +
+                "<div style='display:flex; justify-content:space-between;'>" +
+                  "<strong>" + d.name + "</strong>" +
+                  "<span style='color:#4ade80; font-size:12px;'>" + d.phone + "</span>" +
+                "</div>" +
+                "<div style='font-size:12px; color:#94a3b8; margin-top:3px;'>" + compatNote + " • " + d.area + "</div>" +
+              "</div>"
+            );
+          }
+        }
+      });
+
+      // Save Structured Card to Feed
+      $("#btn_publish_feed").click(function() {
+        if (!latestParsed) return;
+
+        var list = PulseAI.getRequests();
+        list.unshift({
+          id: Date.now(),
+          resourceType: latestParsed.resourceType,
+          bloodGroup: latestParsed.bloodGroup,
+          units: latestParsed.units,
+          hospital: latestParsed.hospital,
+          phone: latestParsed.phone,
+          urgencyScore: latestParsed.urgencyScore,
+          priority: latestParsed.priority,
+          rawMessage: latestRaw,
+          createdAt: Date.now(),
+          expiresAt: latestParsed.expiresAt,
+          status: "Active"
+        });
+        PulseAI.saveRequests(list);
+        window.location.href = "feed.html";
+      });
+
+      $("#btn_reset_all").click(function() {
+        PulseAI.resetAll();
+        location.reload();
+      });
+
+      updateStats();
+    });
+  </script>
+</body>
+</html>
